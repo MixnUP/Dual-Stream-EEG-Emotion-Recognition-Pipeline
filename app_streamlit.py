@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import joblib
 import os
 
@@ -9,6 +10,7 @@ import os
 MODEL_PATH = "eeg_state_model.pkl"
 DSP_FILE = "entropy_features.npy"
 CNN_FILE = "cnn_feature_vectors.npy"
+CWT_FILE = "cwt_scalograms.npy"
 
 LABEL_MAP = {
     1: "Rest (T0)",
@@ -47,6 +49,23 @@ def load_feature_file(path):
         st.error(f"Error loading {path}: {e}")
         return None
 
+def load_image_stack(path):
+    if not os.path.exists(path):
+        st.error(f"File not found: {path}")
+        return None
+    try:
+        arr = np.load(path, allow_pickle=True)
+        if isinstance(arr, np.ndarray) and arr.dtype == object:
+            try:
+                arr = np.stack(arr, axis=0)
+            except Exception:
+                # If stacking fails, keep the original object array
+                pass
+        return arr
+    except Exception as e:
+        st.error(f"Error loading {path}: {e}")
+        return None
+
 
 # -----------------------------
 # Streamlit UI
@@ -65,18 +84,22 @@ st.success("Model + scaler loaded successfully!")
 # -----------------------------
 dsp_features = load_feature_file(DSP_FILE)
 cnn_features = load_feature_file(CNN_FILE)
+cwt_images = load_image_stack(CWT_FILE)
 
-if dsp_features is None or cnn_features is None:
+
+if dsp_features is None or cnn_features is None or cwt_images is None:
     st.stop()
 
-if dsp_features.shape[0] != cnn_features.shape[0]:
-    st.error("Mismatch: DSP and CNN features have different sample counts.")
+if not (dsp_features.shape[0] == cnn_features.shape[0] == cwt_images.shape[0]):
+    st.error("Mismatch: DSP, CNN, and CWT features have different sample counts.")
     st.write("DSP shape:", dsp_features.shape)
     st.write("CNN shape:", cnn_features.shape)
+    st.write("CWT shape:", cwt_images.shape)
     st.stop()
 
 st.info(f"Loaded DSP features: {dsp_features.shape}")
 st.info(f"Loaded CNN features: {cnn_features.shape}")
+st.info(f"Loaded CWT images: {cwt_images.shape}")
 
 # -----------------------------
 # Select sample index
@@ -90,7 +113,42 @@ sample_idx = st.number_input(
 
 st.write(f"Predicting sample #{sample_idx}")
 
-dsp_sample = dsp_features[sample_idx].reshape(1, -1)
+st.subheader("Feature Visualization")
+
+with st.expander("What is a CWT Scalogram?"):
+    st.markdown("""
+    A Continuous Wavelet Transform (CWT) scalogram is a way to visualize the frequency content of a signal over time. For EEG data, this is powerful because it can show how different brainwave frequencies (like alpha, beta, gamma) change during a mental task.
+    - The **X-axis** represents time.
+    - The **Y-axis** represents frequency.
+    - The **color intensity** represents the amplitude or energy of a frequency at a specific time.
+    
+    The patterns in this image are used to train a Convolutional Neural Network (CNN), which learns to identify visual features relevant to the EEG state.
+    """)
+
+with st.expander("What are DSP Features?"):
+    st.markdown("""
+    Digital Signal Processing (DSP) features are numerical values calculated from the raw EEG signal to summarize its characteristics. This model uses features like:
+    - **Spectral Entropy**: Measures the complexity or irregularity of the power spectrum of the signal. A more complex, noisy signal has higher entropy.
+    - **Bandpower**: Measures the average power of the signal within specific frequency bands (e.g., Delta, Theta, Alpha, Beta).
+    
+    These engineered features provide a different, more condensed view of the signal compared to the raw CWT image.
+    """)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.image(
+        cwt_images[sample_idx],
+        caption=f"CWT Scalogram for Sample #{sample_idx}",
+        use_container_width=True
+    )
+
+with col2:
+    st.write("DSP (Entropy & Bandpower) Features:")
+    dsp_sample = dsp_features[sample_idx].reshape(1, -1)
+    df = pd.DataFrame(dsp_sample)
+    st.dataframe(df, use_container_width=True)
+
 cnn_sample = cnn_features[sample_idx].reshape(1, -1)
 
 # Exactly the same fusion as training
