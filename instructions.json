@@ -1,7 +1,7 @@
 {
-  "project": "Dual-Stream EEG Emotion Recognition Pipeline",
+  "project": "Dual-Stream EEG State Classification Pipeline",
   "language": "python",
-  "description": "Build a DSP + CWT dual-stream EEG emotion recognition system using PhysioNet EEG (.edf) datasets.",
+  "description": "Build a DSP + CWT dual-stream EEG state classification system using PhysioNet EEG (.edf) datasets (T0 = Rest, T1 = Hand Motor Imagery, T2 = Foot Motor Imagery).",
   "inputs": {
     "dataset_format": [".edf"],
     "required_files": {
@@ -11,19 +11,19 @@
     }
   },
   "outputs": {
-    "model": "Trained SVM classifier",
+    "model": "Trained SVM classifier for EEG state recognition",
     "metrics": ["accuracy", "precision", "recall", "f1_score"],
     "confusion_matrix": true,
     "saved_artifacts": {
       "entropy_features": "entropy_features.npy",
       "cnn_features": "cnn_feature_vectors.npy",
       "cwt_images": "cwt_scalograms.npy",
-      "trained_model": "emotion_model.pkl"
+      "trained_model": "eeg_state_model.pkl"
     }
   },
   "pipeline": {
     "step_1_load_data": {
-      "description": "Load .edf EEG data with MNE, read annotation-based events (T0, T1, T2), and create epochs.",
+      "description": "Load .edf EEG data with MNE, read annotation-based events (T0/T1/T2), and extract epochs corresponding to motor imagery tasks.",
       "actions": [
         "raw = mne.io.read_raw_edf(<file_path>, preload=True)",
         "events, event_id = mne.events_from_annotations(raw)",
@@ -31,7 +31,7 @@
       ]
     },
     "step_2_preprocessing": {
-      "description": "Apply bandpass + notch filters, clean signals, and segment epochs into overlapping windows.",
+      "description": "Apply bandpass + notch filters, optional ICA cleaning, and segment epochs into overlapping windows.",
       "actions": [
         "raw.filter(1.0, 45.0)",
         "raw.notch_filter([50, 60])",
@@ -69,24 +69,24 @@
       }
     },
     "step_5_feature_fusion": {
-      "description": "Concatenate DSP feature vector + CNN feature vector.",
+      "description": "Concatenate DSP feature vector + CNN feature vector for each EEG window.",
       "actions": [
         "fused_vector = np.concatenate([dsp_features, cnn_features])"
       ]
     },
     "step_6_classification": {
-      "description": "Train SVM classifier using LOSO (Leave-One-Subject-Out) cross-validation.",
+      "description": "Train an SVM classifier using Leave-One-Subject-Out (LOSO) cross-validation for EEG state recognition.",
       "models_supported": ["svm"],
       "actions": [
         "logo = LeaveOneGroupOut()",
-        "for each subject: train on others, test on the held-out one",
+        "for each subject: train on all others, test on held-out one",
         "model = SVC(kernel='rbf', probability=True)",
         "model.fit(X_train_scaled, y_train)",
         "predictions = model.predict(X_test_scaled)"
       ]
     },
     "step_7_evaluation": {
-      "description": "Compute performance metrics and confusion matrix.",
+      "description": "Compute performance metrics and generate a confusion matrix.",
       "metrics": ["accuracy", "precision", "recall", "f1_score"],
       "actions": [
         "accuracy_score(y_test, predictions)",
@@ -97,12 +97,12 @@
       ]
     },
     "step_8_save_artifacts": {
-      "description": "Save learned vectors, CNN features, scalograms, and SVM model.",
+      "description": "Save extracted features, CNN vectors, CWT scalograms, and the trained SVM model for downstream prediction.",
       "actions": [
         "np.save('entropy_features.npy', entropy_features)",
         "np.save('cnn_feature_vectors.npy', cnn_features)",
         "np.save('cwt_scalograms.npy', scalograms)",
-        "pickle.dump({'model': model, 'scaler': scaler}, open('emotion_model.pkl', 'wb'))"
+        "pickle.dump({'model': model, 'scaler': scaler}, open('eeg_state_model.pkl', 'wb'))"
       ]
     }
   },
@@ -112,22 +112,22 @@
     ],
     "task_2_parse_edf_dataset": [
       "Load .edf files",
-      "Extract events from annotations (T0/T1/T2)",
-      "Store subject IDs + label arrays"
+      "Extract event markers (T0, T1, T2)",
+      "Store subject IDs + label arrays for LOSO"
     ],
     "task_3_generate_features": [
       "Loop over subjects and windows",
-      "Extract entropy features",
+      "Extract DSP entropy + bandpower features",
       "Generate CWT scalograms",
       "Extract CNN feature vectors"
     ],
     "task_4_train_model": [
-      "Fuse features",
-      "Train SVM via LOSO",
-      "Aggregate predictions"
+      "Fuse DSP + CNN features",
+      "Train SVM using LOSO",
+      "Aggregate evaluation metrics"
     ],
     "task_5_export_results": [
-      "Save metrics, confusion matrix, feature files, and trained model"
+      "Save feature matrices, scalograms, metrics, and trained EEG state model"
     ]
   }
 }
