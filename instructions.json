@@ -1,0 +1,133 @@
+{
+  "project": "Dual-Stream EEG Emotion Recognition Pipeline",
+  "language": "python",
+  "description": "Build a DSP + CWT dual-stream EEG emotion recognition system using PhysioNet EEG (.edf) datasets.",
+  "inputs": {
+    "dataset_format": [".edf"],
+    "required_files": {
+      "raw_eeg": "Multi-channel EEG recordings in .edf format",
+      "labels": "Annotation markers inside EDF files (e.g., T0, T1, T2)",
+      "metadata": "Sampling rate, channel names, annotation descriptions"
+    }
+  },
+  "outputs": {
+    "model": "Trained SVM classifier",
+    "metrics": ["accuracy", "precision", "recall", "f1_score"],
+    "confusion_matrix": true,
+    "saved_artifacts": {
+      "entropy_features": "entropy_features.npy",
+      "cnn_features": "cnn_feature_vectors.npy",
+      "cwt_images": "cwt_scalograms.npy",
+      "trained_model": "emotion_model.pkl"
+    }
+  },
+  "pipeline": {
+    "step_1_load_data": {
+      "description": "Load .edf EEG data with MNE, read annotation-based events (T0, T1, T2), and create epochs.",
+      "actions": [
+        "raw = mne.io.read_raw_edf(<file_path>, preload=True)",
+        "events, event_id = mne.events_from_annotations(raw)",
+        "epochs = mne.Epochs(raw, events, event_id=event_id, tmin=0, tmax=2.0)"
+      ]
+    },
+    "step_2_preprocessing": {
+      "description": "Apply bandpass + notch filters, clean signals, and segment epochs into overlapping windows.",
+      "actions": [
+        "raw.filter(1.0, 45.0)",
+        "raw.notch_filter([50, 60])",
+        "ica = mne.preprocessing.ICA(n_components=15)",
+        "ica.fit(epochs.pick(eeg=True), decim=3)",
+        "epochs_clean = ica.apply(epochs)",
+        "segment_epochs_into_windows(window_size=2.0, overlap=0.5)"
+      ]
+    },
+    "step_3_stream_A_entropy_features": {
+      "description": "Compute DSP entropy + bandpower features for each segmented window.",
+      "libraries": ["antropy", "scipy", "numpy"],
+      "features": [
+        "sample_entropy",
+        "approximate_entropy",
+        "spectral_entropy",
+        "bandpower (delta, theta, alpha, beta, gamma)"
+      ]
+    },
+    "step_4_stream_B_cwt_cnn_features": {
+      "description": "Generate CWT scalograms from EEG windows and feed them into a PyTorch CNN to extract feature vectors.",
+      "actions": [
+        "coeffs, freqs = pywt.cwt(window, scales, 'morl')",
+        "create RGB scalogram image using matplotlib",
+        "resize to 128x128",
+        "cnn_model = ShallowCNN() (PyTorch)",
+        "cnn_features = cnn_model.forward(scalogram_tensor)"
+      ],
+      "cnn_architecture": {
+        "framework": "pytorch",
+        "conv_layers": 3,
+        "filters": [16, 32, 64],
+        "pooling": "maxpool",
+        "final_vector": "adaptive_avg_pooling → flatten"
+      }
+    },
+    "step_5_feature_fusion": {
+      "description": "Concatenate DSP feature vector + CNN feature vector.",
+      "actions": [
+        "fused_vector = np.concatenate([dsp_features, cnn_features])"
+      ]
+    },
+    "step_6_classification": {
+      "description": "Train SVM classifier using LOSO (Leave-One-Subject-Out) cross-validation.",
+      "models_supported": ["svm"],
+      "actions": [
+        "logo = LeaveOneGroupOut()",
+        "for each subject: train on others, test on the held-out one",
+        "model = SVC(kernel='rbf', probability=True)",
+        "model.fit(X_train_scaled, y_train)",
+        "predictions = model.predict(X_test_scaled)"
+      ]
+    },
+    "step_7_evaluation": {
+      "description": "Compute performance metrics and confusion matrix.",
+      "metrics": ["accuracy", "precision", "recall", "f1_score"],
+      "actions": [
+        "accuracy_score(y_test, predictions)",
+        "precision_score(...)",
+        "recall_score(...)",
+        "f1_score(...)",
+        "confusion_matrix(y_test, predictions)"
+      ]
+    },
+    "step_8_save_artifacts": {
+      "description": "Save learned vectors, CNN features, scalograms, and SVM model.",
+      "actions": [
+        "np.save('entropy_features.npy', entropy_features)",
+        "np.save('cnn_feature_vectors.npy', cnn_features)",
+        "np.save('cwt_scalograms.npy', scalograms)",
+        "pickle.dump({'model': model, 'scaler': scaler}, open('emotion_model.pkl', 'wb'))"
+      ]
+    }
+  },
+  "agent_tasks": {
+    "task_1_prepare_environment": [
+      "Install dependencies: mne, numpy, scipy, matplotlib, antropy, pywt, scikit-learn, torch"
+    ],
+    "task_2_parse_edf_dataset": [
+      "Load .edf files",
+      "Extract events from annotations (T0/T1/T2)",
+      "Store subject IDs + label arrays"
+    ],
+    "task_3_generate_features": [
+      "Loop over subjects and windows",
+      "Extract entropy features",
+      "Generate CWT scalograms",
+      "Extract CNN feature vectors"
+    ],
+    "task_4_train_model": [
+      "Fuse features",
+      "Train SVM via LOSO",
+      "Aggregate predictions"
+    ],
+    "task_5_export_results": [
+      "Save metrics, confusion matrix, feature files, and trained model"
+    ]
+  }
+}

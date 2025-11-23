@@ -1,0 +1,10 @@
+mne
+numpy
+scipy
+matplotlib
+antropy
+PyWavelets
+scikit-learn
+torch
+seaborn
+streamlit
