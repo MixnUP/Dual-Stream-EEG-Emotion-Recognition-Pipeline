@@ -55,15 +55,16 @@ def load_edf(uploaded_file):
         st.error(f"Error loading EDF file: {str(e)}")
         return None
 
-def plot_eeg_data(ax, data, times, channels, title):
-    """Helper function to plot EEG data"""
+def plot_eeg_data(ax, data, times, channels, title, scale=1.0):
+    """Helper function to plot EEG data with adjustable scaling"""
     n_channels = len(channels)
     ch_ranges = np.ptp(data, axis=1)
-    spacing = 2 * np.max(ch_ranges) if np.max(ch_ranges) > 0 else 1.0
+    base_spacing = 2 * np.max(ch_ranges) if np.max(ch_ranges) > 0 else 1.0
+    spacing = base_spacing * scale  # Apply scaling factor
     
     for i, (ch_data, ch_name) in enumerate(zip(data, channels)):
         offset = i * spacing
-        ax.plot(times, ch_data - ch_data.mean() + offset, label=ch_name)
+        ax.plot(times, ch_data - ch_data.mean() + offset, label=ch_name, linewidth=0.8)
     
     # Set y-ticks to show channel names
     y_ticks = [i * spacing for i in range(n_channels)]
@@ -71,7 +72,7 @@ def plot_eeg_data(ax, data, times, channels, title):
     ax.set_yticklabels(channels)
     ax.set_xlabel('Time (s)')
     ax.set_title(title)
-    ax.grid(True)
+    ax.grid(True, alpha=0.3)
 
 def main():
     st.title("EEG Data Viewer with Filtering")
@@ -126,7 +127,11 @@ def main():
             )
             
             # Plot options
+            st.sidebar.subheader("Display Settings")
             show_psd = st.sidebar.checkbox("Show Power Spectral Density", value=False)
+            show_difference = st.sidebar.checkbox("Show Difference (Raw - Filtered)", value=False)
+            y_scale = st.sidebar.slider("Vertical Scale", 0.1, 5.0, 1.0, 0.1, 
+                                      help="Adjust the vertical spacing between channels")
             
             # Apply filters
             filtered_raw = apply_filters(
@@ -166,15 +171,25 @@ def main():
             else:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
                 
-                # Raw data
+                # Get data for both plots
                 data, times = raw[channels, start_idx:stop_idx]
-                plot_eeg_data(ax1, data, times, channels, 'Raw EEG Data')
-                
-                # Filtered data
                 data_filt, _ = filtered_raw[channels, start_idx:stop_idx]
-                plot_eeg_data(ax2, data_filt, times, channels, 
-                            f'Filtered EEG Data ({l_freq}-{h_freq} Hz, ' + 
-                            f'Notch: {notch_freqs if notch_enabled else "Off"}')
+                
+                # Plot raw data
+                plot_eeg_data(ax1, data, times, channels, 'Raw EEG Data', y_scale)
+                
+                # Plot either filtered data or difference
+                if show_difference:
+                    # Show difference between raw and filtered
+                    diff = data - data_filt
+                    plot_eeg_data(ax2, diff, times, channels, 
+                                f'Difference (Raw - Filtered) - Scale: {y_scale}x', y_scale)
+                else:
+                    # Show filtered data
+                    plot_eeg_data(ax2, data_filt, times, channels, 
+                                f'Filtered EEG Data ({l_freq}-{h_freq} Hz, ' + 
+                                f'Notch: {notch_freqs if notch_enabled else "Off"}, ' +
+                                f'Scale: {y_scale}x', y_scale)
                 
                 plt.tight_layout()
                 st.pyplot(fig)
