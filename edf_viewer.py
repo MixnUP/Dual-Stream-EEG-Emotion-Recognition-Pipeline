@@ -145,40 +145,50 @@ def main():
             start_idx = int(time_range[0] * raw.info['sfreq'])
             stop_idx = int(time_range[1] * raw.info['sfreq'])
             
-            # Create plots
+            # Get data for plotting
+            data, times = raw[channels, start_idx:stop_idx]
+            data_filt, _ = filtered_raw[channels, start_idx:stop_idx]
+            
             if show_psd:
-                fig, axs = plt.subplots(2, 2, figsize=(15, 12))
+                # Create separate figures for raw and filtered PSDs
+                fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12))
                 
                 # Raw PSD
-                raw.pick(channels).compute_psd().plot(axes=axs[0,0], show=False, color='blue')
-                axs[0,0].set_title('Raw PSD')
-                
-                # Filtered PSD
-                filtered_raw.pick(channels).compute_psd().plot(axes=axs[0,1], show=False, color='orange')
-                axs[0,1].set_title('Filtered PSD')
+                raw.pick(channels).compute_psd().plot(axes=ax1, show=False, color='blue')
+                ax1.set_title('Raw PSD')
                 
                 # Raw time series
-                data, times = raw[channels, start_idx:stop_idx]
-                plot_eeg_data(axs[1,0], data, times, channels, 'Raw EEG Data')
-                
-                # Filtered time series
-                data_filt, _ = filtered_raw[channels, start_idx:stop_idx]
-                plot_eeg_data(axs[1,1], data_filt, times, channels, 'Filtered EEG Data')
+                plot_eeg_data(ax2, data, times, channels, 'Raw EEG Data', y_scale)
                 
                 plt.tight_layout()
-                st.pyplot(fig)
+                st.pyplot(fig1)
+                
+                # Create a new figure for filtered data
+                fig2, (ax3, ax4) = plt.subplots(2, 1, figsize=(15, 12))
+                
+                # Filtered PSD
+                filtered_raw.pick(channels).compute_psd().plot(axes=ax3, show=False, color='orange')
+                ax3.set_title('Filtered PSD')
+                
+                # Filtered time series
+                plot_title = (f'Filtered EEG Data ({l_freq}-{h_freq} Hz, ' + 
+                            f'Notch: {notch_freqs if notch_enabled else "Off"}, ' +
+                            f'Scale: {y_scale}x')
+                plot_eeg_data(ax4, data_filt, times, channels, plot_title, y_scale)
+                
+                plt.tight_layout()
+                st.pyplot(fig2)
                 
             else:
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
-                
-                # Get data for both plots
-                data, times = raw[channels, start_idx:stop_idx]
-                data_filt, _ = filtered_raw[channels, start_idx:stop_idx]
-                
-                # Plot raw data
+                # Create separate figures for raw and filtered time series
+                fig1, ax1 = plt.subplots(figsize=(15, 6))
                 plot_eeg_data(ax1, data, times, channels, 'Raw EEG Data', y_scale)
+                plt.tight_layout()
+                st.pyplot(fig1)
                 
-                # Plot either filtered data or difference
+                # Second figure for filtered data or difference
+                fig2, ax2 = plt.subplots(figsize=(15, 6))
+                
                 if show_difference:
                     # Show difference between raw and filtered
                     diff = data - data_filt
@@ -186,13 +196,13 @@ def main():
                                 f'Difference (Raw - Filtered) - Scale: {y_scale}x', y_scale)
                 else:
                     # Show filtered data
-                    plot_eeg_data(ax2, data_filt, times, channels, 
-                                f'Filtered EEG Data ({l_freq}-{h_freq} Hz, ' + 
+                    plot_title = (f'Filtered EEG Data ({l_freq}-{h_freq} Hz, ' + 
                                 f'Notch: {notch_freqs if notch_enabled else "Off"}, ' +
-                                f'Scale: {y_scale}x', y_scale)
+                                f'Scale: {y_scale}x')
+                    plot_eeg_data(ax2, data_filt, times, channels, plot_title, y_scale)
                 
                 plt.tight_layout()
-                st.pyplot(fig)
+                st.pyplot(fig2)
             
             # Add channel information
             st.subheader("Channel Information")
