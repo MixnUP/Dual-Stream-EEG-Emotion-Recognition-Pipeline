@@ -150,8 +150,8 @@ def main():
             data_filt, _ = filtered_raw[channels, start_idx:stop_idx]
             
             if show_psd:
-                # Create separate figures for raw and filtered PSDs
-                fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12))
+                # Create separate figures for raw and filtered PSDs with more square dimensions
+                fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
                 
                 # Raw PSD
                 raw.pick(channels).compute_psd().plot(axes=ax1, show=False, color='blue')
@@ -163,8 +163,8 @@ def main():
                 plt.tight_layout()
                 st.pyplot(fig1)
                 
-                # Create a new figure for filtered data
-                fig2, (ax3, ax4) = plt.subplots(2, 1, figsize=(15, 12))
+                # Create a new figure for filtered data with matching dimensions
+                fig2, (ax3, ax4) = plt.subplots(2, 1, figsize=(12, 10))
                 
                 # Filtered PSD
                 filtered_raw.pick(channels).compute_psd().plot(axes=ax3, show=False, color='orange')
@@ -180,14 +180,14 @@ def main():
                 st.pyplot(fig2)
                 
             else:
-                # Create separate figures for raw and filtered time series
-                fig1, ax1 = plt.subplots(figsize=(15, 6))
+                # Create separate figures for raw and filtered time series with more square dimensions
+                fig1, ax1 = plt.subplots(figsize=(12, 8))
                 plot_eeg_data(ax1, data, times, channels, 'Raw EEG Data', y_scale)
                 plt.tight_layout()
                 st.pyplot(fig1)
                 
-                # Second figure for filtered data or difference
-                fig2, ax2 = plt.subplots(figsize=(15, 6))
+                # Second figure for filtered data or difference with matching dimensions
+                fig2, ax2 = plt.subplots(figsize=(12, 8))
                 
                 if show_difference:
                     # Show difference between raw and filtered
